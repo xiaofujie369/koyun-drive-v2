@@ -6,7 +6,7 @@ import {
   NPopconfirm, NProgress, NSpace, NTabPane, NTabs, NTag, useDialog, useMessage, type DataTableColumns,
 } from 'naive-ui'
 import {
-  CloudUploadOutline, FolderOpenOutline, AddOutline, RefreshOutline, EllipsisHorizontal, TrashOutline, MoveOutline, SwapVerticalOutline,
+  CloudUploadOutline, FolderOpenOutline, AddOutline, RefreshOutline, EllipsisHorizontal, TrashOutline, MoveOutline, SwapVerticalOutline, ReorderFourOutline,
 } from '@vicons/ionicons5'
 import UploadPanel from '../components/UploadPanel.vue'
 import FolderPicker from '../components/FolderPicker.vue'
@@ -78,9 +78,78 @@ function onFiles(list: FileList | null) {
   uploader.add(ok, folderId.value, current.value?.name ?? '我的网盘')
   if (fileInput.value) fileInput.value.value = ''
 }
+// Files dragged in from the computer upload; rows dragged inside the table reorder/move instead.
+const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
+function onPageDragOver(e: DragEvent) {
+  if (tab.value === 'files' && isFileDrag(e)) dragging.value = true
+}
 function onDrop(e: DragEvent) {
   dragging.value = false
-  onFiles(e.dataTransfer?.files ?? null)
+  if (isFileDrag(e)) onFiles(e.dataTransfer?.files ?? null)
+}
+
+// ---- drag rows: folder↔folder / file↔file reorders (saved on drop), file onto folder moves it
+let rowDrag: { kind: 'folder' | 'file'; id: number; moved: boolean; done: boolean } | null = null
+const dragKey = ref<string | null>(null)
+const dropTarget = ref<number | null>(null)
+
+async function saveOrder() {
+  try {
+    await api.reorder({ folder_ids: folders.value.map((f) => f.id), file_ids: files.value.map((f) => f.id) })
+    message.success('顺序已保存')
+  } catch (e) { message.error(errorMessage(e)); load() }
+}
+function rowProps(row: Row) {
+  return {
+    draggable: true,
+    class: [dragKey.value === row.key ? 'row-dragging' : '', row.kind === 'folder' && dropTarget.value === row.item.id ? 'row-drop' : ''].join(' '),
+    onDragstart: (e: DragEvent) => {
+      e.dataTransfer?.setData('text/plain', row.key)
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+      rowDrag = { kind: row.kind, id: row.item.id, moved: false, done: false }
+      dragKey.value = row.key
+    },
+    onDragover: (e: DragEvent) => {
+      const d = rowDrag
+      if (!d) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (d.kind === row.kind && d.id !== row.item.id) {
+        dropTarget.value = null
+        const list = (row.kind === 'folder' ? folders : files) as typeof folders | typeof files
+        const arr = [...list.value] as { id: number }[]
+        const from = arr.findIndex((x) => x.id === d.id)
+        const to = arr.findIndex((x) => x.id === row.item.id)
+        if (from < 0 || to < 0) return
+        arr.splice(to, 0, ...arr.splice(from, 1))
+        list.value = arr as never
+        d.moved = true
+      } else if (d.kind === 'file' && row.kind === 'folder') {
+        dropTarget.value = row.item.id
+      }
+    },
+    onDrop: async (e: DragEvent) => {
+      const d = rowDrag
+      if (!d) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (d.kind === 'file' && row.kind === 'folder') {
+        d.done = true
+        try {
+          await api.updateFile(d.id, { folder_id: row.item.id })
+          message.success(`已移动到「${row.item.name}」`)
+          load()
+        } catch (err) { message.error(errorMessage(err)) }
+      }
+    },
+    onDragend: () => {
+      const d = rowDrag
+      rowDrag = null
+      dragKey.value = null
+      dropTarget.value = null
+      if (d && d.moved && !d.done) void saveOrder()
+    },
+  }
 }
 
 // ------------------------------------------------------------ actions
@@ -195,6 +264,7 @@ const selectedIds = () => ({
 })
 
 const columns = computed<DataTableColumns<Row>>(() => [
+  { key: 'drag', width: 28, render: () => h(NIcon, { size: 16, class: 'grip', title: '拖动调整顺序' }, { default: () => h(ReorderFourOutline) }) },
   { type: 'selection' },
   {
     title: '名称', key: 'name', minWidth: 240,
@@ -261,7 +331,7 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
 </script>
 
 <template>
-  <div class="container page" @dragover.prevent="tab === 'files' && (dragging = true)" @dragleave.self="dragging = false" @drop.prevent="onDrop">
+  <div class="container page" @dragover.prevent="onPageDragOver" @dragleave.self="dragging = false" @drop.prevent="onDrop">
     <NTabs v-model:value="tab" type="line" animated>
       <NTabPane name="files" tab="我的文件">
         <div class="toolbar">
@@ -285,7 +355,7 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
         </NAlert>
         <input ref="fileInput" type="file" multiple hidden @change="onFiles(($event.target as HTMLInputElement).files)" />
         <div class="table-wrap" :class="{ dragging }">
-          <NDataTable v-model:checked-row-keys="checked" :columns="columns" :data="rows" :row-key="(r: Row) => r.key" :loading="loading" :bordered="false" size="small" />
+          <NDataTable v-model:checked-row-keys="checked" :columns="columns" :data="rows" :row-key="(r: Row) => r.key" :row-props="rowProps" :loading="loading" :bordered="false" size="small" />
           <div v-if="!loading && !rows.length" class="empty" @click="pickFiles">
             <NIcon :size="44" color="#9aa4b2"><CloudUploadOutline /></NIcon>
             <p>拖拽文件到这里，或点击上传</p>
@@ -343,6 +413,10 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
 .empty p { margin: 6px 0 0; }
 .account { max-width: 560px; }
 .usage { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+:deep(.grip) { cursor: grab; color: #c0c6cf; }
+:deep(tr:hover .grip) { color: #667085; }
+:deep(.row-dragging) { opacity: .4; }
+:deep(.row-drop td) { background: rgba(22, 132, 91, .12) !important; }
 :deep(.name-cell) { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; }
 :deep(.cell-name) { font-weight: 500; word-break: break-all; display: flex; align-items: center; flex-wrap: wrap; }
 :deep(.name-cell .file-badge), :deep(.name-cell .folder-badge) { width: 34px; height: 34px; font-size: 9px; }

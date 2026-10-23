@@ -252,8 +252,9 @@ class DriveController extends Controller
             abort(404, '部分项目不存在，请刷新后重试');
         }
         // Everything must sit in the same place, otherwise the order is meaningless.
-        $places = $folders->map(fn ($f) => $f->owner_id.':'.(int) $f->parent_id)
-            ->merge($files->map(fn ($f) => $f->owner_id.':'.(int) $f->folder_id))->unique();
+        // toBase(): an empty Eloquent collection would try to merge these strings as models.
+        $places = $folders->toBase()->map(fn ($f) => $f->owner_id.':'.(int) $f->parent_id)
+            ->merge($files->toBase()->map(fn ($f) => $f->owner_id.':'.(int) $f->folder_id))->unique();
         if ($places->count() > 1) {
             abort(422, '只能调整同一个文件夹内的顺序');
         }

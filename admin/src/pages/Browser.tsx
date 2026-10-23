@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronRight, CloudUpload, Download, Eye, Folder, FolderOpen, FolderPlus, Globe, Link2, Lock, MoreHorizontal,
-  ArrowUpDown, MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
+  ArrowUpDown, GripVertical, MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { api, errorMessage, type DriveFile, type DriveFolder, type FolderRow } from '@/lib/api'
+import { api, errorMessage, type DriveFile, type DriveFolder, type FolderRow, type Listing } from '@/lib/api'
 import { onUploadDone, uploader } from '@/lib/uploads'
 import { cn, copyText, fileColor, fileExt, formatBytes, formatTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -115,7 +115,77 @@ export default function Browser() {
     uploader.add(ok, at.folderId, label)
     if (input.current) input.current.value = ''
   }
-  const onDrop = (e: DragEvent) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }
+  // Files dragged in from the computer upload; rows dragged inside the table reorder/move instead.
+  const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+  const onDrop = (e: DragEvent) => { e.preventDefault(); setDragging(false); if (isFileDrag(e)) addFiles(e.dataTransfer.files) }
+
+  // ---- drag rows to reorder (folder↔folder, file↔file) or drop a file onto a folder to move it
+  const listKey = ['list', at.ownerId, at.folderId]
+  const rowDrag = useRef<{ kind: 'folder' | 'file'; id: number; moved: boolean; done: boolean } | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<number | null>(null)
+
+  const saveOrder = async () => {
+    const d = qc.getQueryData<Listing>(listKey)
+    if (!d) return
+    try {
+      await api.reorder({ folder_ids: d.folders.map((f) => f.id), file_ids: d.files.map((f) => f.id) })
+      toast.success('顺序已保存')
+    } catch (e) { toast.error(errorMessage(e)); refresh() }
+  }
+  const rowProps = (kind: 'folder' | 'file', id: number) => ({
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', `${kind}:${id}`)
+      rowDrag.current = { kind, id, moved: false, done: false }
+      setDragId(`${kind}${id}`)
+    },
+    onDragOver: (e: DragEvent) => {
+      const d = rowDrag.current
+      if (!d) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (d.kind === kind && d.id !== id) {
+        setDropTarget(null)
+        qc.setQueryData<Listing>(listKey, (old) => {
+          if (!old) return old
+          const field = kind === 'folder' ? 'folders' : 'files'
+          const arr = [...old[field]] as (DriveFolder | DriveFile)[]
+          const from = arr.findIndex((x) => x.id === d.id)
+          const to = arr.findIndex((x) => x.id === id)
+          if (from < 0 || to < 0) return old
+          arr.splice(to, 0, ...arr.splice(from, 1))
+          d.moved = true
+          return { ...old, [field]: arr }
+        })
+      } else if (d.kind === 'file' && kind === 'folder') {
+        setDropTarget(id)
+      }
+    },
+    onDrop: async (e: DragEvent) => {
+      const d = rowDrag.current
+      if (!d) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (d.kind === 'file' && kind === 'folder') {
+        d.done = true
+        const name = folders.find((f) => f.id === id)?.name
+        try {
+          await api.batch({ action: 'move', file_ids: [d.id], folder_ids: [], target_id: id })
+          toast.success(`已移动到「${name}」`)
+          refresh()
+        } catch (err) { toast.error(errorMessage(err)) }
+      }
+    },
+    onDragEnd: () => {
+      const d = rowDrag.current
+      rowDrag.current = null
+      setDragId(null)
+      setDropTarget(null)
+      if (d && d.moved && !d.done) void saveOrder()
+    },
+  })
 
   const sel = () => ({
     files: [...checked].filter((k) => k[0] === 'f').map((k) => Number(k.slice(1))),
@@ -148,10 +218,10 @@ export default function Browser() {
   }
 
   return (
-    <div onDragOver={(e) => { e.preventDefault(); setDragging(true) }} onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }} onDrop={onDrop}>
+    <div onDragOver={(e) => { e.preventDefault(); if (isFileDrag(e)) setDragging(true) }} onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }} onDrop={onDrop}>
       <PageHeader
         title="文件浏览与上传"
-        description={<>支持大文件分片上传与断点续传（单文件上限 {formatBytes(cfg.data?.max_file_size ?? 0)}），可直接拖拽文件到此页面。分片经 {cfg.data?.upload_url || '当前域名'} 上传。</>}
+        description={<>拖动行可调整顺序，把文件拖到文件夹上可移动。支持大文件分片上传与断点续传（单文件上限 {formatBytes(cfg.data?.max_file_size ?? 0)}），可直接拖拽文件到此页面。分片经 {cfg.data?.upload_url || '当前域名'} 上传。</>}
       />
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         <Card className="max-h-[70vh] overflow-y-auto p-2 lg:sticky lg:top-20">
@@ -191,7 +261,7 @@ export default function Browser() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10"><Checkbox checked={allChecked} onCheckedChange={(v) => setChecked(v ? new Set(allKeys) : new Set())} /></TableHead>
+                <TableHead className="w-16"><Checkbox className="ml-5" checked={allChecked} onCheckedChange={(v) => setChecked(v ? new Set(allKeys) : new Set())} /></TableHead>
                 <TableHead>名称</TableHead>
                 <TableHead className="hidden w-28 md:table-cell">大小</TableHead>
                 <TableHead className="hidden w-20 md:table-cell">下载</TableHead>
@@ -201,8 +271,9 @@ export default function Browser() {
             </TableHeader>
             <TableBody>
               {folders.map((f) => (
-                <TableRow key={`d${f.id}`}>
-                  <TableCell><Checkbox checked={checked.has(`d${f.id}`)} onCheckedChange={() => toggle(`d${f.id}`)} /></TableCell>
+                <TableRow key={`d${f.id}`} {...rowProps('folder', f.id)}
+                  className={cn('group', dragId === `folder${f.id}` && 'opacity-40', dropTarget === f.id && 'bg-primary/10 outline outline-2 -outline-offset-2 outline-primary')}>
+                  <TableCell><div className="flex items-center gap-1"><GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground" /><Checkbox checked={checked.has(`d${f.id}`)} onCheckedChange={() => toggle(`d${f.id}`)} /></div></TableCell>
                   <TableCell>
                     <button type="button" className="flex min-w-0 items-center gap-3 text-left" onClick={() => pick({ ownerId: f.owner_id, folderId: f.id })}>
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-500/15"><Folder className="h-4 w-4" /></span>
@@ -232,8 +303,8 @@ export default function Browser() {
                 </TableRow>
               ))}
               {files.map((f) => (
-                <TableRow key={`f${f.id}`}>
-                  <TableCell><Checkbox checked={checked.has(`f${f.id}`)} onCheckedChange={() => toggle(`f${f.id}`)} /></TableCell>
+                <TableRow key={`f${f.id}`} {...rowProps('file', f.id)} className={cn('group', dragId === `file${f.id}` && 'opacity-40')}>
+                  <TableCell><div className="flex items-center gap-1"><GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground" /><Checkbox checked={checked.has(`f${f.id}`)} onCheckedChange={() => toggle(`f${f.id}`)} /></div></TableCell>
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[9px] font-bold text-white" style={{ background: fileColor(f.name) }}>{fileExt(f.name)}</span>
