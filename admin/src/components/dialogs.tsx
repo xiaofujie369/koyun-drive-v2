@@ -60,7 +60,7 @@ export function MoveDialog({ open, onOpenChange, folders, ownerId, exclude, onMo
   )
 }
 
-export interface EditTarget { kind: 'file' | 'folder' | 'new'; id?: number; name: string; text: string; isPublic?: boolean; sortOrder?: number }
+export interface EditTarget { kind: 'file' | 'folder' | 'new'; id?: number; name: string; text: string; isPublic?: boolean; sortOrder?: number; accessPassword?: string }
 
 export function EditDialog({ target, onOpenChange, onSave }: {
   target: EditTarget | null; onOpenChange: (o: boolean) => void; onSave: (t: EditTarget) => Promise<unknown>
@@ -85,6 +85,12 @@ export function EditDialog({ target, onOpenChange, onSave }: {
           <Field label={isFolder ? '描述' : '备注'} hint={isFolder ? '显示在前台文件中心' : '显示在文件名下方，例如版本说明、安装提示'}>
             <Textarea rows={3} value={form.text} maxLength={isFolder ? 500 : 1000} onChange={(e) => setForm({ ...form, text: e.target.value })} />
           </Field>
+          {isFolder && (
+            <Field label="访问密码" hint="设置后访客打开该文件夹（含子文件夹）需输入密码；留空则无需密码。管理员和所有者不受限制。">
+              <Input value={form.accessPassword ?? ''} maxLength={64} placeholder="留空 = 不需要密码" autoComplete="off"
+                onChange={(e) => setForm({ ...form, accessPassword: e.target.value.replace(/\s/g, '') })} />
+            </Field>
+          )}
           {isFolder && (
             <div className="grid grid-cols-2 gap-4">
               <Field label="公开到文件中心">

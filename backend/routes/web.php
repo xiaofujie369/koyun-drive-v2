@@ -34,6 +34,7 @@ Route::prefix('kd')->group(function () {
         Route::get('public/home', [PublicController::class, 'home'])->name('public.home');
         Route::get('public/folders/{id}', [PublicController::class, 'folder'])->whereNumber('id')->name('public.folder');
         Route::get('public/search', [PublicController::class, 'search'])->name('public.search');
+        Route::post('public/folders/{id}/unlock', [PublicController::class, 'unlockFolder'])->whereNumber('id')->name('public.folder.unlock');
 
         Route::get('s/{token}', [ShareController::class, 'show'])->name('share.show');
         Route::post('s/{token}/unlock', [ShareController::class, 'unlock'])->name('share.unlock');

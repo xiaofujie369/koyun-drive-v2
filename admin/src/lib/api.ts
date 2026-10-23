@@ -11,9 +11,9 @@ export interface AdminUser {
 }
 export interface FolderRow {
   id: number; name: string; parent_id: number | null; owner_id: number; owner: string; description: string
-  is_public: boolean; sort_order: number; files: number; size: number; downloads: number; created_at: string
+  is_public: boolean; access_password: string | null; sort_order: number; files: number; size: number; downloads: number; created_at: string
 }
-export interface DriveFolder { id: number; name: string; parent_id: number | null; owner_id: number; description: string; is_public: boolean; sort_order: number; files?: number; size?: number; created_at: string; updated_at: string }
+export interface DriveFolder { id: number; name: string; parent_id: number | null; owner_id: number; description: string; is_public: boolean; access_password: string | null; sort_order: number; files?: number; size?: number; created_at: string; updated_at: string }
 export interface DriveFile {
   id: number; name: string; size: number; mime_type: string; note: string; folder_id: number | null; owner_id: number
   downloads: number; preview: boolean; created_at: string; updated_at: string; owner?: string; folder?: string | null
@@ -112,8 +112,8 @@ export const api = {
   logins: (params: Params) => data(http.get<Page<LoginEntry>>('/admin/logs/logins', { params })),
   // drive operations (admins may act on any owner's items)
   list: (params: { folder_id?: number | null; owner_id?: number }) => data(http.get<Listing>('/drive/list', { params: { folder_id: params.folder_id ?? undefined, owner_id: params.owner_id } })),
-  createFolder: (body: { name: string; parent_id: number | null; is_public?: boolean; description?: string; owner_id?: number }) => data(http.post<{ folder: DriveFolder }>('/drive/folders', body)),
-  updateFolder: (id: number, body: Partial<{ name: string; parent_id: number | null; is_public: boolean; description: string; sort_order: number }>) => data(http.patch(`/drive/folders/${id}`, body)),
+  createFolder: (body: { name: string; parent_id: number | null; is_public?: boolean; description?: string; access_password?: string | null; owner_id?: number }) => data(http.post<{ folder: DriveFolder }>('/drive/folders', body)),
+  updateFolder: (id: number, body: Partial<{ name: string; parent_id: number | null; is_public: boolean; description: string; access_password: string | null; sort_order: number }>) => data(http.patch(`/drive/folders/${id}`, body)),
   deleteFolder: (id: number) => data(http.delete<{ files: number; folders: number }>(`/drive/folders/${id}`)),
   updateFile: (id: number, body: Partial<{ name: string; folder_id: number | null; note: string }>) => data(http.patch(`/drive/files/${id}`, body)),
   batch: (body: { action: 'move' | 'delete'; file_ids: number[]; folder_ids: number[]; target_id?: number | null }) => data(http.post<{ files: number; folders: number }>('/drive/batch', body)),

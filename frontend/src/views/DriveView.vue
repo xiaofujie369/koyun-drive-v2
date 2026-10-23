@@ -153,7 +153,7 @@ function rowProps(row: Row) {
 }
 
 // ------------------------------------------------------------ actions
-const nameModal = ref<{ mode: 'new' | 'rename-folder' | 'rename-file'; id?: number; value: string; note?: string; desc?: string } | null>(null)
+const nameModal = ref<{ mode: 'new' | 'rename-folder' | 'rename-file'; id?: number; value: string; note?: string; desc?: string; pwd?: string } | null>(null)
 const savingName = ref(false)
 async function saveName() {
   const m = nameModal.value
@@ -161,7 +161,7 @@ async function saveName() {
   savingName.value = true
   try {
     if (m.mode === 'new') await api.createFolder({ name: m.value.trim(), parent_id: folderId.value })
-    else if (m.mode === 'rename-folder') await api.updateFolder(m.id!, { name: m.value.trim(), description: m.desc ?? '' })
+    else if (m.mode === 'rename-folder') await api.updateFolder(m.id!, { name: m.value.trim(), description: m.desc ?? '', access_password: (m.pwd ?? '').trim() || null })
     else await api.updateFile(m.id!, { name: m.value.trim(), note: m.note ?? '' })
     nameModal.value = null
     message.success('已保存')
@@ -225,7 +225,7 @@ function rowMenu(row: Row) {
       { key: 'open', label: '打开' },
       { key: 'share', label: '分享' },
       ...(canPublish.value ? [{ key: 'public', label: row.item.is_public ? '取消公开' : '公开到文件中心' }] : []),
-      { key: 'rename', label: '重命名 / 描述' },
+      { key: 'rename', label: '重命名 / 描述 / 访问密码' },
       { key: 'move', label: '移动到…' },
       { type: 'divider', key: 'd' },
       { key: 'delete', label: '删除', props: { style: 'color:#d03050' } },
@@ -249,7 +249,7 @@ function onRowAction(key: string, row: Row) {
   else if (key === 'share') { shareTarget.value = { type: row.kind, id: it.id, name: it.name }; shareShow.value = true }
   else if (key === 'public' && row.kind === 'folder') togglePublic(row.item)
   else if (key === 'rename') nameModal.value = row.kind === 'folder'
-    ? { mode: 'rename-folder', id: it.id, value: it.name, desc: row.item.description }
+    ? { mode: 'rename-folder', id: it.id, value: it.name, desc: row.item.description, pwd: row.item.access_password ?? '' }
     : { mode: 'rename-file', id: it.id, value: it.name, note: row.item.note }
   else if (key === 'move') picker.value = { show: true, files: row.kind === 'file' ? [it.id] : [], folders: row.kind === 'folder' ? [it.id] : [] }
   else if (key === 'delete') confirmDelete(row.kind === 'file' ? [it.id] : [], row.kind === 'folder' ? [it.id] : [])
@@ -276,6 +276,7 @@ const columns = computed<DataTableColumns<Row>>(() => [
         h('div', { class: 'cell-name' }, [
           row.item.name,
           row.kind === 'folder' && row.item.is_public ? h(NTag, { size: 'small', type: 'success', bordered: false, style: 'margin-left:8px' }, { default: () => '公开' }) : null,
+          row.kind === 'folder' && row.item.access_password ? h(NTag, { size: 'small', type: 'warning', bordered: false, style: 'margin-left:6px' }, { default: () => '需密码' }) : null,
         ]),
         h('div', { class: 'muted small truncate' }, row.kind === 'folder' ? `${row.item.files ?? 0} 个文件${row.item.description ? ' · ' + row.item.description : ''}` : row.item.note),
       ]),
@@ -392,6 +393,9 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
     <NModal :show="!!nameModal" preset="card" :title="nameModal?.mode === 'new' ? '新建文件夹' : '重命名'" style="width: min(440px, 94vw)" @update:show="nameModal = null">
       <NForm v-if="nameModal" @submit.prevent="saveName">
         <NFormItem label="名称"><NInput v-model:value="nameModal.value" maxlength="180" autofocus /></NFormItem>
+        <NFormItem v-if="nameModal.mode === 'rename-folder'" label="访问密码">
+          <NInput v-model:value="nameModal.pwd" maxlength="64" clearable placeholder="留空则公开访问无需密码" />
+        </NFormItem>
         <NFormItem v-if="nameModal.mode === 'rename-folder'" label="描述"><NInput v-model:value="nameModal.desc" type="textarea" maxlength="500" placeholder="显示在文件中心（可选）" /></NFormItem>
         <NFormItem v-if="nameModal.mode === 'rename-file'" label="备注"><NInput v-model:value="nameModal.note" type="textarea" maxlength="1000" placeholder="例如版本说明、安装提示（可选）" /></NFormItem>
         <NSpace justify="end"><NButton @click="nameModal = null">取消</NButton><NButton type="primary" attr-type="submit" :loading="savingName">保存</NButton></NSpace>

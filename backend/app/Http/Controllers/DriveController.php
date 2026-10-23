@@ -89,8 +89,9 @@ class DriveController extends Controller
             'parent_id' => ['nullable', 'integer', 'exists:folders,id'],
             'is_public' => ['sometimes', 'boolean'],
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'access_password' => ['sometimes', 'nullable', 'string', 'max:64', 'not_regex:/\s/'],
             'owner_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ], ['name.not_regex' => '文件夹名不能包含斜杠'], ['name' => '文件夹名称']);
+        ], ['name.not_regex' => '文件夹名不能包含斜杠', 'access_password.not_regex' => '访问密码不能包含空格'], ['name' => '文件夹名称', 'access_password' => '访问密码']);
 
         $ownerId = $user->id;
         if (! empty($data['parent_id'])) {
@@ -109,6 +110,7 @@ class DriveController extends Controller
             'name' => $name,
             'description' => (string) ($data['description'] ?? ''),
             'is_public' => $this->canPublish($request) && ($data['is_public'] ?? false),
+            'access_password' => ($data['access_password'] ?? '') !== '' ? $data['access_password'] : null,
         ]);
 
         return response()->json(['folder' => $this->folderArray($folder)], 201);
@@ -123,8 +125,9 @@ class DriveController extends Controller
             'parent_id' => ['sometimes', 'nullable', 'integer', 'exists:folders,id'],
             'is_public' => ['sometimes', 'boolean'],
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'access_password' => ['sometimes', 'nullable', 'string', 'max:64', 'not_regex:/\s/'],
             'sort_order' => ['sometimes', 'integer', 'between:-100000,100000'],
-        ], ['name.not_regex' => '文件夹名不能包含斜杠'], ['name' => '文件夹名称']);
+        ], ['name.not_regex' => '文件夹名不能包含斜杠', 'access_password.not_regex' => '访问密码不能包含空格'], ['name' => '文件夹名称', 'access_password' => '访问密码']);
 
         if (array_key_exists('parent_id', $data)) {
             $this->moveFolderTo($request, $folder, $data['parent_id']);
@@ -135,6 +138,9 @@ class DriveController extends Controller
         }
         if (array_key_exists('description', $data)) {
             $folder->description = (string) $data['description'];
+        }
+        if (array_key_exists('access_password', $data)) {
+            $folder->access_password = ($data['access_password'] ?? '') !== '' ? $data['access_password'] : null;
         }
         if (isset($data['sort_order'])) {
             $folder->sort_order = $data['sort_order'];
@@ -390,6 +396,8 @@ class DriveController extends Controller
         return [
             'id' => $f->id, 'name' => $f->name, 'parent_id' => $f->parent_id, 'owner_id' => $f->owner_id,
             'description' => $f->description, 'is_public' => $f->is_public, 'sort_order' => $f->sort_order,
+            // only ever returned to the owner or an admin (drive endpoints are owner-authorised)
+            'access_password' => $f->access_password,
             'created_at' => $f->created_at?->toIso8601String(), 'updated_at' => $f->updated_at?->toIso8601String(),
         ];
     }

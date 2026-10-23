@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronRight, CloudUpload, Download, Eye, Folder, FolderOpen, FolderPlus, Globe, Link2, Lock, MoreHorizontal,
-  ArrowUpDown, GripVertical, MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
+  ArrowUpDown, GripVertical, KeyRound, MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage, type DriveFile, type DriveFolder, type FolderRow, type Listing } from '@/lib/api'
@@ -42,6 +42,7 @@ function Tree({ folders, loc, onPick, meId }: { folders: FolderRow[]; loc: Loc |
             {active ? <FolderOpen className="h-4 w-4 shrink-0 text-amber-500" /> : <Folder className="h-4 w-4 shrink-0 text-amber-500" />}
             <span className="truncate">{f.name}</span>
             {f.is_public && <Globe className="h-3 w-3 shrink-0 text-success" />}
+            {f.access_password && <KeyRound className="h-3 w-3 shrink-0 text-warning" />}
           </button>
         </div>
         {!isClosed && kids.map((k) => node(k, depth + 1))}
@@ -196,8 +197,8 @@ export default function Browser() {
   const allChecked = allKeys.length > 0 && allKeys.every((k) => checked.has(k))
 
   const save = async (t: EditTarget) => {
-    if (t.kind === 'new') await api.createFolder({ name: t.name, parent_id: at.folderId, description: t.text, is_public: t.isPublic, owner_id: at.folderId ? undefined : at.ownerId })
-    else if (t.kind === 'folder') await api.updateFolder(t.id!, { name: t.name, description: t.text, is_public: t.isPublic, sort_order: t.sortOrder })
+    if (t.kind === 'new') await api.createFolder({ name: t.name, parent_id: at.folderId, description: t.text, is_public: t.isPublic, access_password: t.accessPassword || null, owner_id: at.folderId ? undefined : at.ownerId })
+    else if (t.kind === 'folder') await api.updateFolder(t.id!, { name: t.name, description: t.text, is_public: t.isPublic, access_password: t.accessPassword || null, sort_order: t.sortOrder })
     else await api.updateFile(t.id!, { name: t.name, note: t.text })
     toast.success('已保存')
     refresh()
@@ -278,7 +279,7 @@ export default function Browser() {
                     <button type="button" className="flex min-w-0 items-center gap-3 text-left" onClick={() => pick({ ownerId: f.owner_id, folderId: f.id })}>
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-500/15"><Folder className="h-4 w-4" /></span>
                       <span className="min-w-0">
-                        <span className="flex items-center gap-2 font-medium">{f.name}{f.is_public ? <Badge variant="success">公开</Badge> : <Lock className="h-3 w-3 text-muted-foreground" />}</span>
+                        <span className="flex items-center gap-2 font-medium">{f.name}{f.is_public ? <Badge variant="success">公开</Badge> : <Lock className="h-3 w-3 text-muted-foreground" />}{f.access_password && <Badge className="bg-warning/15 text-warning" title={`访问密码：${f.access_password}`}><KeyRound className="mr-1 h-3 w-3" />需密码</Badge>}</span>
                         <span className="block truncate text-xs text-muted-foreground">{f.files ?? 0} 个文件{f.description ? ` · ${f.description}` : ''}</span>
                       </span>
                     </button>
@@ -293,7 +294,8 @@ export default function Browser() {
                         <DropdownMenuItem onSelect={() => pick({ ownerId: f.owner_id, folderId: f.id })}><FolderOpen />打开</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => togglePublic(f)}><Globe />{f.is_public ? '取消公开' : '公开到文件中心'}</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setShare({ type: 'folder', id: f.id, name: f.name })}><Share2 />分享</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setEdit({ kind: 'folder', id: f.id, name: f.name, text: f.description, isPublic: f.is_public, sortOrder: f.sort_order })}><Pencil />编辑</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setEdit({ kind: 'folder', id: f.id, name: f.name, text: f.description, isPublic: f.is_public, sortOrder: f.sort_order, accessPassword: f.access_password ?? '' })}><KeyRound />访问密码</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setEdit({ kind: 'folder', id: f.id, name: f.name, text: f.description, isPublic: f.is_public, sortOrder: f.sort_order, accessPassword: f.access_password ?? '' })}><Pencil />编辑</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setMove({ files: [], folders: [f.id] })}><MoveRight />移动到…</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem destructive onSelect={() => setDel({ files: [], folders: [f.id] })}><Trash2 />删除</DropdownMenuItem>

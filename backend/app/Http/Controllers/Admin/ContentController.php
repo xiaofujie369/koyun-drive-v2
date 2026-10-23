@@ -48,7 +48,7 @@ class ContentController extends Controller
         return response()->json(['folders' => Folder::with('owner:id,username')->orderByDesc('sort_order')->orderBy('name')->get()
             ->map(fn ($f) => [
                 'id' => $f->id, 'name' => $f->name, 'parent_id' => $f->parent_id, 'owner_id' => $f->owner_id,
-                'owner' => $f->owner?->username, 'description' => $f->description, 'is_public' => $f->is_public,
+                'owner' => $f->owner?->username, 'description' => $f->description, 'is_public' => $f->is_public, 'access_password' => $f->access_password,
                 'sort_order' => $f->sort_order, 'files' => (int) ($stats[$f->id]->n ?? 0), 'size' => (int) ($stats[$f->id]->bytes ?? 0),
                 'downloads' => (int) ($stats[$f->id]->dl ?? 0), 'created_at' => $f->created_at?->toIso8601String(),
             ])]);

@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 /** Records every state-changing request made by an administrator. */
 class AuditWrites
 {
-    private const SECRET_FIELDS = ['password', 'current_password', 'new_password'];
+    private const SECRET_FIELDS = ['password', 'current_password', 'new_password', 'access_password'];
 
     public function handle(Request $request, Closure $next): Response
     {

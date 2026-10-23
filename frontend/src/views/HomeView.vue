@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NAlert, NIcon, NInput, NSkeleton, NEmpty, NButton } from 'naive-ui'
-import { SearchOutline, FolderOpenOutline } from '@vicons/ionicons5'
+import { SearchOutline, FolderOpenOutline, LockClosedOutline } from '@vicons/ionicons5'
 import { api, errorMessage, type PublicFolderCard } from '../lib/api'
 import { store } from '../lib/store'
 import { formatBytes, formatDate } from '../lib/format'
@@ -56,7 +56,7 @@ const search = () => q.value.trim() && router.push({ name: 'search', query: { q:
       <RouterLink v-for="f in folders" :key="f.id" :to="`/folder/${f.id}`" class="card">
         <div class="folder-badge"><NIcon :size="22"><FolderOpenOutline /></NIcon></div>
         <div style="min-width: 0">
-          <div class="title truncate">{{ f.name }}</div>
+          <div class="title truncate">{{ f.name }}<NIcon v-if="f.locked" class="lock" title="需要访问密码"><LockClosedOutline /></NIcon></div>
           <div class="muted small">{{ f.files }} 个文件 · {{ formatBytes(f.size) }}<template v-if="f.subfolders"> · {{ f.subfolders }} 个子目录</template></div>
           <div v-if="f.description" class="desc small truncate">{{ f.description }}</div>
           <div v-else class="muted small">更新于 {{ formatDate(f.updated_at) }}</div>
@@ -78,6 +78,7 @@ const search = () => q.value.trim() && router.push({ name: 'search', query: { q:
 .stat strong { display: block; font-size: 22px; margin-top: 4px; }
 .card { display: flex; gap: 14px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; transition: box-shadow .15s, transform .15s; }
 .card:hover { box-shadow: 0 10px 26px rgba(28, 39, 64, .09); transform: translateY(-1px); }
+.lock { margin-left: 6px; color: #c58b00; vertical-align: -2px; }
 .title { font-weight: 600; font-size: 15px; margin-bottom: 3px; }
 .desc { color: #475467; margin-top: 2px; }
 @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } .hero { padding: 28px 0 56px; } .hero h1 { font-size: 24px; } }

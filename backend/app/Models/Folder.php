@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Folder extends Model
 {
-    protected $fillable = ['owner_id', 'parent_id', 'name', 'description', 'is_public', 'sort_order'];
+    protected $hidden = ['access_password'];
+
+    protected $fillable = ['owner_id', 'parent_id', 'name', 'description', 'is_public', 'access_password', 'sort_order'];
 
     protected function casts(): array
     {
