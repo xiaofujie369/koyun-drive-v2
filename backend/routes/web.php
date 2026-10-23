@@ -58,6 +58,7 @@ Route::prefix('kd')->group(function () {
         Route::delete('drive/files/{id}', [DriveController::class, 'deleteFile'])->whereNumber('id')->name('drive.files.destroy');
         Route::get('drive/files/{id}/link', [DriveController::class, 'link'])->whereNumber('id')->name('drive.files.link');
         Route::post('drive/batch', [DriveController::class, 'batch'])->name('drive.batch');
+        Route::post('drive/reorder', [DriveController::class, 'reorder'])->name('drive.reorder');
 
         Route::get('drive/shares', [ShareController::class, 'index'])->name('drive.shares.index');
         Route::post('drive/shares', [ShareController::class, 'store'])->name('drive.shares.store');

@@ -58,7 +58,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'admin.users.store': '新建用户', 'admin.users.update': '修改用户', 'admin.users.password': '重置密码', 'admin.users.destroy': '删除用户',
   'admin.uploads.destroy': '清理上传会话', 'admin.settings.update': '修改系统设置',
   'drive.folders.store': '新建文件夹', 'drive.folders.update': '修改文件夹', 'drive.folders.destroy': '删除文件夹',
-  'drive.files.update': '修改文件', 'drive.files.destroy': '删除文件', 'drive.batch': '批量移动/删除',
+  'drive.files.update': '修改文件', 'drive.files.destroy': '删除文件', 'drive.batch': '批量移动/删除', 'drive.reorder': '调整顺序',
   'drive.shares.store': '创建分享', 'drive.shares.destroy': '取消分享',
   'uploads.init': '开始上传', 'uploads.complete': '上传完成', 'uploads.cancel': '取消上传', 'account.password': '修改自己的密码',
   'auth.password': '修改自己的密码',

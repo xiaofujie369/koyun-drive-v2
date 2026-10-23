@@ -10,13 +10,13 @@ class DriveFile extends Model
 {
     protected $table = 'files';
 
-    protected $fillable = ['owner_id', 'folder_id', 'name', 'stored_path', 'size', 'mime_type', 'note', 'download_count'];
+    protected $fillable = ['owner_id', 'folder_id', 'name', 'stored_path', 'size', 'mime_type', 'note', 'download_count', 'sort_order'];
 
     protected $hidden = ['stored_path'];
 
     protected function casts(): array
     {
-        return ['size' => 'integer', 'download_count' => 'integer', 'folder_id' => 'integer', 'owner_id' => 'integer'];
+        return ['size' => 'integer', 'download_count' => 'integer', 'sort_order' => 'integer', 'folder_id' => 'integer', 'owner_id' => 'integer'];
     }
 
     protected static function booted(): void

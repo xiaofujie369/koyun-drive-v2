@@ -7,8 +7,10 @@ use App\Models\Folder;
 use App\Models\User;
 use App\Services\Downloader;
 use App\Services\DriveSettings;
+use App\Services\PublicTree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
@@ -40,7 +42,7 @@ class DriveController extends Controller
             ->orderByDesc('sort_order')->orderBy('name')->get();
         $counts = DriveFile::whereIn('folder_id', $folders->pluck('id'))->selectRaw('folder_id, COUNT(*) n, COALESCE(SUM(size),0) bytes')
             ->groupBy('folder_id')->get()->keyBy('folder_id');
-        $files = DriveFile::where('owner_id', $ownerId)->where('folder_id', $folderId)->orderBy('name')->get();
+        $files = DriveFile::where('owner_id', $ownerId)->where('folder_id', $folderId)->orderByDesc('sort_order')->orderBy('name')->get();
 
         return response()->json([
             'owner' => User::find($ownerId)?->only(['id', 'username']),
@@ -57,7 +59,7 @@ class DriveController extends Controller
     public function tree(Request $request): JsonResponse
     {
         $user = $this->user($request);
-        $query = Folder::query()->with('owner:id,username')->orderBy('name');
+        $query = Folder::query()->with('owner:id,username')->orderByDesc('sort_order')->orderBy('name');
         if (! ($user->is_admin && $request->boolean('all'))) {
             $query->where('owner_id', $request->filled('owner_id') && $user->is_admin ? $request->integer('owner_id') : $user->id);
         }
@@ -230,6 +232,50 @@ class DriveController extends Controller
         return response()->json(['files' => $files->count(), 'folders' => $folders->count()]);
     }
 
+    /**
+     * Saves a manual order for the items of one folder (or an owner's root).
+     * IDs come in display order; the first gets the highest sort_order.
+     */
+    public function reorder(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'folder_ids' => ['array', 'max:2000'],
+            'folder_ids.*' => ['integer', 'distinct'],
+            'file_ids' => ['array', 'max:5000'],
+            'file_ids.*' => ['integer', 'distinct'],
+        ]);
+        $folderIds = $data['folder_ids'] ?? [];
+        $fileIds = $data['file_ids'] ?? [];
+        $folders = Folder::whereIn('id', $folderIds)->get(['id', 'owner_id', 'parent_id']);
+        $files = DriveFile::whereIn('id', $fileIds)->get(['id', 'owner_id', 'folder_id']);
+        if ($folders->count() !== count($folderIds) || $files->count() !== count($fileIds)) {
+            abort(404, '部分项目不存在，请刷新后重试');
+        }
+        // Everything must sit in the same place, otherwise the order is meaningless.
+        $places = $folders->map(fn ($f) => $f->owner_id.':'.(int) $f->parent_id)
+            ->merge($files->map(fn ($f) => $f->owner_id.':'.(int) $f->folder_id))->unique();
+        if ($places->count() > 1) {
+            abort(422, '只能调整同一个文件夹内的顺序');
+        }
+        foreach ([...$folders, ...$files] as $item) {
+            $this->authorizeOwner($request, $item->owner_id);
+        }
+
+        DB::transaction(function () use ($folderIds, $fileIds) {
+            foreach ($folderIds as $i => $id) {
+                Folder::whereKey($id)->update(['sort_order' => count($folderIds) - $i]);
+            }
+            foreach ($fileIds as $i => $id) {
+                DriveFile::whereKey($id)->update(['sort_order' => count($fileIds) - $i]);
+            }
+        });
+        // Query-builder updates skip model events, so invalidate the public caches here.
+        PublicTree::flush();
+        Cache::increment('drive:files-version');
+
+        return response()->json(['folders' => count($folderIds), 'files' => count($fileIds)]);
+    }
+
     /** Short-lived signed link (works in download managers, no cookie needed). */
     public function link(Request $request, int $id): JsonResponse
     {
@@ -351,7 +397,7 @@ class DriveController extends Controller
     {
         return [
             'id' => $f->id, 'name' => $f->name, 'size' => $f->size, 'mime_type' => $f->mime_type, 'note' => $f->note,
-            'folder_id' => $f->folder_id, 'owner_id' => $f->owner_id, 'downloads' => $f->download_count,
+            'folder_id' => $f->folder_id, 'owner_id' => $f->owner_id, 'downloads' => $f->download_count, 'sort_order' => $f->sort_order,
             'preview' => Downloader::canPreview($f),
             'created_at' => $f->created_at?->toIso8601String(), 'updated_at' => $f->updated_at?->toIso8601String(),
         ];

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronRight, CloudUpload, Download, Eye, Folder, FolderOpen, FolderPlus, Globe, Link2, Lock, MoreHorizontal,
-  MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
+  ArrowUpDown, MoveRight, Pencil, RefreshCw, Share2, Trash2, User,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage, type DriveFile, type DriveFolder, type FolderRow } from '@/lib/api'
@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmDialog, EmptyRow, PageHeader } from '@/components/common'
-import { EditDialog, MoveDialog, ShareDialog, type EditTarget } from '@/components/dialogs'
+import { EditDialog, MoveDialog, ReorderDialog, ShareDialog, type EditTarget } from '@/components/dialogs'
 
 type Loc = { ownerId: number; folderId: number | null }
 
@@ -86,6 +86,7 @@ export default function Browser() {
   const [share, setShare] = useState<{ type: 'file' | 'folder'; id: number; name: string } | null>(null)
   const [del, setDel] = useState<{ files: number[]; folders: number[] } | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [reorder, setReorder] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
   const pick = (l: Loc) => {
@@ -178,6 +179,7 @@ export default function Browser() {
                   <Button size="sm" variant="outline" className="text-destructive" onClick={() => setDel(sel())}><Trash2 />删除</Button>
                 </>
               )}
+              <Button size="sm" variant="outline" disabled={folders.length + files.length < 2} onClick={() => setReorder(true)}><ArrowUpDown />调整顺序</Button>
               <Button size="sm" variant="outline" onClick={refresh} title="刷新"><RefreshCw className={cn(list.isFetching && 'animate-spin')} /></Button>
               <Button size="sm" variant="outline" onClick={() => setEdit({ kind: 'new', name: '', text: '', isPublic: !at.folderId && at.ownerId === meId, sortOrder: 0 })}><FolderPlus />新建文件夹</Button>
               <Button size="sm" onClick={() => input.current?.click()}><CloudUpload />上传文件</Button>
@@ -276,6 +278,7 @@ export default function Browser() {
       <MoveDialog open={!!move} onOpenChange={(o) => !o && setMove(null)} folders={tree.data ?? []} ownerId={at.ownerId} exclude={move?.folders ?? []}
         onMove={async (target) => { await api.batch({ action: 'move', file_ids: move!.files, folder_ids: move!.folders, target_id: target }); toast.success('移动成功'); setChecked(new Set()); refresh() }} />
       <ShareDialog target={share} onOpenChange={(o) => !o && setShare(null)} />
+      <ReorderDialog open={reorder} onOpenChange={setReorder} title={`调整顺序 · ${label}`} folders={folders} files={files} onSaved={refresh} />
       <ConfirmDialog
         open={!!del} onOpenChange={(o) => !o && setDel(null)} destructive title="确认删除" confirmText="永久删除"
         description={del?.folders.length ? `将删除 ${del.files.length + del.folders.length} 个项目，文件夹内的所有文件和子文件夹也会被永久删除，无法恢复。` : `将永久删除 ${del?.files.length ?? 0} 个文件，无法恢复。`}

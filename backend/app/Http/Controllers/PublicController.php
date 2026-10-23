@@ -105,7 +105,7 @@ class PublicController extends Controller
                 ->map(fn ($f) => $f->toArray() + [
                     'files' => DriveFile::where('folder_id', $f->id)->count(),
                 ]),
-            'files' => DriveFile::where('folder_id', $id)->orderBy('name')->get()->map(fn ($f) => $this->publicFile($f)),
+            'files' => DriveFile::where('folder_id', $id)->orderByDesc('sort_order')->orderBy('name')->get()->map(fn ($f) => $this->publicFile($f)),
         ]);
     }
 

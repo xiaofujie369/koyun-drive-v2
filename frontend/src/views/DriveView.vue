@@ -6,11 +6,12 @@ import {
   NPopconfirm, NProgress, NSpace, NTabPane, NTabs, NTag, useDialog, useMessage, type DataTableColumns,
 } from 'naive-ui'
 import {
-  CloudUploadOutline, FolderOpenOutline, AddOutline, RefreshOutline, EllipsisHorizontal, TrashOutline, MoveOutline,
+  CloudUploadOutline, FolderOpenOutline, AddOutline, RefreshOutline, EllipsisHorizontal, TrashOutline, MoveOutline, SwapVerticalOutline,
 } from '@vicons/ionicons5'
 import UploadPanel from '../components/UploadPanel.vue'
 import FolderPicker from '../components/FolderPicker.vue'
 import ShareDialog from '../components/ShareDialog.vue'
+import ReorderModal from '../components/ReorderModal.vue'
 import { api, errorMessage, type Crumb, type DriveFile, type DriveFolder, type ShareRow } from '../lib/api'
 import { store, refreshUser } from '../lib/store'
 import { uploader, onUploadDone } from '../lib/uploads'
@@ -110,6 +111,7 @@ async function moveTo(target: number | null) {
 
 const shareTarget = ref<{ type: 'file' | 'folder'; id: number; name: string } | null>(null)
 const shareShow = ref(false)
+const reorderShow = ref(false)
 
 function confirmDelete(fileIds: number[], folderIds: number[]) {
   const n = fileIds.length + folderIds.length
@@ -272,6 +274,7 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
               <NButton size="small" @click="picker = { show: true, ...selectedIds() }"><template #icon><NIcon><MoveOutline /></NIcon></template>移动 ({{ checked.length }})</NButton>
               <NButton size="small" type="error" ghost @click="confirmDelete(selectedIds().files, selectedIds().folders)"><template #icon><NIcon><TrashOutline /></NIcon></template>删除</NButton>
             </template>
+            <NButton size="small" :disabled="rows.length < 2" @click="reorderShow = true"><template #icon><NIcon><SwapVerticalOutline /></NIcon></template>调整顺序</NButton>
             <NButton size="small" @click="load"><template #icon><NIcon><RefreshOutline /></NIcon></template></NButton>
             <NButton size="small" @click="nameModal = { mode: 'new', value: '' }"><template #icon><NIcon><AddOutline /></NIcon></template>新建文件夹</NButton>
             <NButton size="small" type="primary" @click="pickFiles"><template #icon><NIcon><CloudUploadOutline /></NIcon></template>上传文件</NButton>
@@ -326,6 +329,7 @@ const usagePct = computed(() => (store.user?.quota ? Math.min(100, Math.round((s
     </NModal>
     <FolderPicker v-model:show="picker.show" :exclude="picker.folders" title="移动到" @pick="moveTo" />
     <ShareDialog v-model:show="shareShow" :target="shareTarget" @created="tab === 'shares' && loadShares()" />
+    <ReorderModal v-model:show="reorderShow" :folders="folders" :files="files" :title="`调整顺序 · ${current?.name ?? '我的网盘'}`" @saved="load" />
     <UploadPanel />
   </div>
 </template>

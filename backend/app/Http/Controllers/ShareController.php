@@ -133,7 +133,7 @@ class ShareController extends Controller
         return response()->json([
             'breadcrumbs' => $crumbs,
             'folders' => Folder::where('parent_id', $folderId)->orderByDesc('sort_order')->orderBy('name')->get(['id', 'name']),
-            'files' => DriveFile::where('folder_id', $folderId)->orderBy('name')->get()->map(fn ($f) => $this->fileEntry($share, $f)),
+            'files' => DriveFile::where('folder_id', $folderId)->orderByDesc('sort_order')->orderBy('name')->get()->map(fn ($f) => $this->fileEntry($share, $f)),
         ]);
     }
 

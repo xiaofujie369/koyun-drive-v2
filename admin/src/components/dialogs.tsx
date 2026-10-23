@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Copy, Loader2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpToLine, Copy, GripVertical, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, errorMessage, type FolderRow, type ShareRow } from '@/lib/api'
-import { copyText } from '@/lib/utils'
+import { cn, copyText, formatBytes } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -168,6 +168,98 @@ export function ShareDialog({ target, onOpenChange }: { target: { type: 'file' |
             </DialogFooter>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface OrderItem { id: number; name: string; size?: number; created_at?: string }
+type OrderKind = 'folders' | 'files'
+
+/** Drag (or arrow-button) ordering of one folder's subfolders and files. */
+export function ReorderDialog({ open, onOpenChange, title, folders, files, onSaved }: {
+  open: boolean; onOpenChange: (o: boolean) => void; title: string
+  folders: OrderItem[]; files: OrderItem[]; onSaved: () => void
+}) {
+  const [lists, setLists] = useState<Record<OrderKind, OrderItem[]>>({ folders: [], files: [] })
+  const [drag, setDrag] = useState<{ kind: OrderKind; index: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => { if (open) { setLists({ folders: [...folders], files: [...files] }); setError('') } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const move = (kind: OrderKind, from: number, to: number) => setLists((l) => {
+    if (to < 0 || to >= l[kind].length || from === to) return l
+    const arr = [...l[kind]]
+    const [it] = arr.splice(from, 1)
+    arr.splice(to, 0, it)
+    return { ...l, [kind]: arr }
+  })
+  const byName = (a: OrderItem, b: OrderItem) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true })
+  const sorts = {
+    name: byName,
+    time: (a: OrderItem, b: OrderItem) => (b.created_at ?? '').localeCompare(a.created_at ?? ''),
+    size: (a: OrderItem, b: OrderItem) => (b.size ?? 0) - (a.size ?? 0),
+  }
+  const sortAll = (by: keyof typeof sorts) => setLists((l) => ({
+    folders: [...l.folders].sort(by === 'size' ? byName : sorts[by]), files: [...l.files].sort(sorts[by]),
+  }))
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.reorder({ folder_ids: lists.folders.map((f) => f.id), file_ids: lists.files.map((f) => f.id) })
+      toast.success('顺序已保存')
+      onSaved()
+      onOpenChange(false)
+    } catch (e) { setError(errorMessage(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>拖动 <GripVertical className="inline h-3.5 w-3.5" /> 或用箭头调整顺序，保存后前台文件中心与分享页同步生效。</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">快速排序：</span>
+          <Button size="sm" variant="outline" onClick={() => sortAll('name')}>按名称</Button>
+          <Button size="sm" variant="outline" onClick={() => sortAll('time')}>最新在前</Button>
+          <Button size="sm" variant="outline" onClick={() => sortAll('size')}>最大在前</Button>
+        </div>
+        <div className="max-h-[55vh] overflow-y-auto rounded-lg border">
+          {(['folders', 'files'] as const).map((kind) => lists[kind].length > 0 && (
+            <div key={kind}>
+              <div className="sticky top-0 z-10 bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">{kind === 'folders' ? '文件夹' : '文件'}（{lists[kind].length}）</div>
+              {lists[kind].map((it, i) => (
+                <div
+                  key={it.id} draggable
+                  onDragStart={() => setDrag({ kind, index: i })}
+                  onDragEnd={() => setDrag(null)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (drag && drag.kind === kind && drag.index !== i) { move(kind, drag.index, i); setDrag({ kind, index: i }) }
+                  }}
+                  onDrop={(e) => e.preventDefault()}
+                  className={cn('flex items-center gap-2 border-t bg-card px-2 py-1.5 text-sm', drag?.kind === kind && drag.index === i && 'bg-primary/10 opacity-70')}
+                >
+                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
+                  <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">{i + 1}</span>
+                  <span className="flex-1 truncate">{kind === 'folders' ? '📁 ' : ''}{it.name}</span>
+                  {kind === 'files' && <span className="hidden text-xs text-muted-foreground sm:inline">{formatBytes(it.size ?? 0)}</span>}
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="置顶" disabled={i === 0} onClick={() => move(kind, i, 0)}><ArrowUpToLine /></Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="上移" disabled={i === 0} onClick={() => move(kind, i, i - 1)}><ArrowUp /></Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="下移" disabled={i === lists[kind].length - 1} onClick={() => move(kind, i, i + 1)}><ArrowDown /></Button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <ErrorBox error={error} />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button onClick={save} disabled={busy}>{busy && <Loader2 className="animate-spin" />}保存顺序</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

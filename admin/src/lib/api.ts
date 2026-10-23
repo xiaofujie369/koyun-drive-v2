@@ -117,6 +117,7 @@ export const api = {
   deleteFolder: (id: number) => data(http.delete<{ files: number; folders: number }>(`/drive/folders/${id}`)),
   updateFile: (id: number, body: Partial<{ name: string; folder_id: number | null; note: string }>) => data(http.patch(`/drive/files/${id}`, body)),
   batch: (body: { action: 'move' | 'delete'; file_ids: number[]; folder_ids: number[]; target_id?: number | null }) => data(http.post<{ files: number; folders: number }>('/drive/batch', body)),
+  reorder: (body: { folder_ids: number[]; file_ids: number[] }) => data(http.post<{ folders: number; files: number }>('/drive/reorder', body)),
   fileLink: (id: number) => data(http.get<{ url: string; preview_url: string | null }>(`/drive/files/${id}/link`)),
   createShare: (body: { file_id?: number; folder_id?: number; password?: string; expires_days?: number; max_downloads?: number }) => data(http.post<{ share: ShareRow }>('/drive/shares', body)).then((r) => r.share),
   deleteShare: (id: number) => data(http.delete(`/drive/shares/${id}`)),

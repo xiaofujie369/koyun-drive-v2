@@ -47,6 +47,7 @@ export const api = {
   updateFile: (id: number, body: Partial<{ name: string; folder_id: number | null; note: string }>) => d(http.patch(`/drive/files/${id}`, body)),
   deleteFile: (id: number) => d(http.delete(`/drive/files/${id}`)),
   batch: (body: { action: 'move' | 'delete'; file_ids: number[]; folder_ids: number[]; target_id?: number | null }) => d(http.post<{ files: number; folders: number }>('/drive/batch', body)),
+  reorder: (body: { folder_ids: number[]; file_ids: number[] }) => d(http.post<{ folders: number; files: number }>('/drive/reorder', body)),
   fileLink: (id: number) => d(http.get<{ url: string; preview_url: string | null }>(`/drive/files/${id}/link`)),
 
   shares: () => d(http.get<{ shares: ShareRow[] }>('/drive/shares')).then((r) => r.shares),
