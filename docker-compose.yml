@@ -1,0 +1,89 @@
+name: koyun-drive-v2
+
+services:
+  app:
+    build: { context: ., target: app }
+    image: koyun-drive:2-app
+    container_name: drive-app
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/storage:/app/storage/drive
+      - ./data/logs:/app/storage/logs
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [drive]
+
+  scheduler:
+    image: koyun-drive:2-app
+    container_name: drive-scheduler
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CONTAINER_ROLE: scheduler
+    volumes:
+      - ./data/storage:/app/storage/drive
+      - ./data/logs:/app/storage/logs
+    healthcheck: { disable: true }
+    depends_on:
+      app: { condition: service_healthy }
+    networks: [drive]
+
+  web:
+    build: { context: ., target: web }
+    image: koyun-drive:2-web
+    container_name: drive-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-127.0.0.1:8196}:80"
+    volumes:
+      - ./data/storage/files:/data/files:ro
+    depends_on:
+      app: { condition: service_healthy }
+    networks: [drive]
+
+  mysql:
+    image: mysql:5.7.44
+    container_name: drive-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=64M
+      - --performance-schema=OFF
+      - --max-connections=80
+      - --default-time-zone=+08:00
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [drive]
+
+  redis:
+    image: redis:7.2.6-alpine
+    container_name: drive-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "96mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - ./data/redis:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [drive]
+
+networks:
+  drive:

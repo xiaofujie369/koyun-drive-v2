@@ -1,0 +1,10 @@
+.env
+data/
+node_modules/
+dist/
+backend/vendor/
+backend/.env
+backend/storage/*
+!backend/storage/.gitkeep
+backend/bootstrap/cache/*.php
+.DS_Store

@@ -1,0 +1,102 @@
+# Koyun Drive v2 — runs the prebuilt images from GitHub Container Registry.
+# Installed by install.sh; to build from source use the docker-compose.yml in the repo root instead.
+name: koyun-drive
+
+x-app: &app
+  image: ghcr.io/xiaofujie369/koyun-drive-v2:app-${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - ./data/storage:/app/storage/drive
+    - ./data/logs:/app/storage/logs
+  networks: [drive]
+
+services:
+  app:
+    <<: *app
+    container_name: drive-app
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  scheduler:
+    <<: *app
+    container_name: drive-scheduler
+    environment:
+      CONTAINER_ROLE: scheduler
+    healthcheck: { disable: true }
+    depends_on:
+      app: { condition: service_healthy }
+
+  web:
+    image: ghcr.io/xiaofujie369/koyun-drive-v2:web-${IMAGE_TAG:-latest}
+    container_name: drive-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-127.0.0.1:8096}:80"
+    volumes:
+      - ./data/storage/files:/data/files:ro
+    depends_on:
+      app: { condition: service_healthy }
+    networks: [drive]
+
+  mysql:
+    image: mysql:5.7.44
+    container_name: drive-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${APP_TIMEZONE:-Asia/Shanghai}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=64M
+      - --performance-schema=OFF
+      - --max-connections=80
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [drive]
+
+  redis:
+    image: redis:7.2.6-alpine
+    container_name: drive-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "96mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - ./data/redis:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [drive]
+
+  # Optional: automatic HTTPS for your domain(s). Enabled by install.sh with `--profile caddy`
+  # when ports 80/443 are free; skip it if you already run nginx/Caddy/宝塔 on this server.
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: drive-caddy
+    profiles: [caddy]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+    depends_on: [web]
+    networks: [drive]
+
+networks:
+  drive:
